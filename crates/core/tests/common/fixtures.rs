@@ -1,5 +1,5 @@
-use crate::media::*;
-use crate::Estimated;
+use pandafit_core::media::*;
+use pandafit_core::Estimated;
 
 pub fn thor() -> MediaInfo {
     let audio = |index, codec: &str, lang: &str, title: &str, ch, bps| Track {

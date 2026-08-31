@@ -22,6 +22,10 @@ pub trait CodecProfile: Send + Sync {
     /// Аргументы ffmpeg для выходного потока с номером `out_idx` внутри своего типа.
     fn args(&self, ctx: &EncodeCtx, out_idx: usize) -> Vec<String>;
     fn notes(&self, ctx: &EncodeCtx) -> Vec<Note>;
+    /// Сохранит ли профиль слой Dolby Vision. По умолчанию — нет.
+    fn preserves_dolby_vision(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Default)]

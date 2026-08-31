@@ -63,9 +63,10 @@ impl CodecProfile for CbrAudio {
             notes.push(Note::warning(
                 NoteTarget::Track(ctx.src.index),
                 format!(
-                    "{} не умеет {}.1 — дорожка сложится в 5.1",
+                    "{} не умеет {}.1 — дорожка сложится в {}.1",
                     self.label,
-                    src_ch - 1
+                    src_ch - 1,
+                    self.max_channels - 1
                 ),
             ));
         }
@@ -206,5 +207,25 @@ mod tests {
         let ctx = EncodeCtx { src: &src, opts: &opts, duration_s: 100.0 };
         let bps = reg.get("flac").unwrap().estimate_bps(&ctx);
         assert_eq!(bps.confidence, Confidence::Guessed);
+    }
+
+    #[test]
+    fn eac3_warns_about_downmix_from_ten_channels() {
+        let reg = CodecRegistry::with_builtins();
+        let src = Track {
+            index: 3,
+            kind: TrackKind::Audio,
+            codec: "pcm_s24le".into(),
+            language: Some("eng".into()),
+            title: None,
+            channels: Some(10),
+            width: None,
+            height: None,
+            bps: Estimated::exact(10_000_000),
+        };
+        let opts = Opts { bitrate_bps: Some(768_000), ..Default::default() };
+        let ctx = EncodeCtx { src: &src, opts: &opts, duration_s: 100.0 };
+        let notes = reg.get("eac3").unwrap().notes(&ctx);
+        assert!(notes.iter().any(|n| n.level == Level::Warning && n.text.contains("7.1")));
     }
 }

@@ -11,6 +11,7 @@ pub mod codecs;
 pub mod profile;
 pub mod estimate;
 pub mod explain;
+pub mod compile;
 
 pub use estimated::{Confidence, Estimated};
 pub use media::{ColorInfo, MediaInfo, Track, TrackKind};
@@ -20,3 +21,4 @@ pub use codec::{CodecProfile, CodecRegistry, EncodeCtx};
 pub use profile::{BitrateProfile, Sample};
 pub use estimate::{estimate, SizeBreakdown, TrackSize, Verdict};
 pub use explain::{explain, has_blockers};
+pub use compile::{compile, BuildRequest, ProgressKind, Step};

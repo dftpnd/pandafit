@@ -122,12 +122,15 @@ pub fn estimate(
 }
 
 #[cfg(test)]
+#[path = "../tests/common/fixtures.rs"]
+mod fixtures;
+
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::fixtures::thor;
+    use super::fixtures::thor;
     use crate::codec::CodecRegistry;
     use crate::plan::{Opts, Plan, Target, TrackAction};
-
     fn bd50() -> Target {
         Target::preset("BD-R DL", 50_050_629_632)
     }

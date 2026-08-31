@@ -1,3 +1,7 @@
+// Позволяет обращаться к собственным типам по имени крейта. Нужно для общей
+// тестовой фикстуры, которая одним и тем же текстом включается и сюда, и в crates/app.
+extern crate self as pandafit_core;
+
 pub mod estimated;
 pub mod media;
 pub mod note;
@@ -6,9 +10,6 @@ pub mod codec;
 pub mod codecs;
 pub mod profile;
 pub mod estimate;
-
-#[cfg(test)]
-pub mod fixtures;
 
 pub use estimated::{Confidence, Estimated};
 pub use media::{ColorInfo, MediaInfo, Track, TrackKind};

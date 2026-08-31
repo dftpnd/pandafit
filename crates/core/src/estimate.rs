@@ -221,4 +221,21 @@ mod tests {
         assert!(b.total_upper > b.usable_bytes);
         assert!(matches!(b.verdict, Verdict::Tight), "вердикт {:?}", b.verdict);
     }
+
+    #[test]
+    fn control_numbers_match_expectations() {
+        let m = thor();
+        let reg = CodecRegistry::with_builtins();
+        let mut plan = Plan::from_media(&m, bd50());
+        keep_two_ac3(&mut plan);
+
+        let b = estimate(&m, &plan, &reg, None);
+
+        // Контрольные числа из письма
+        assert_eq!(b.tracks.iter().map(|t| t.bytes.value).sum::<u64>(), 48_349_501_010, "payload должно быть 48 349 501 010");
+        assert_eq!(b.container.value, 243_747_505, "контейнер должен быть 243 747 505");
+        assert_eq!(b.total.value, 48_593_250_304, "total.value должно быть 48 593 250 304");
+        assert_eq!(b.total_upper, 48_605_435_904, "total_upper должно быть 48 605 435 904");
+        assert_eq!(b.usable_bytes, 49_041_228_432, "usable должно быть 49 041 228 432");
+    }
 }

@@ -1,6 +1,6 @@
 use pandafit_core::codec::CodecRegistry;
 use pandafit_core::compile::{needs_dv_chain, BuildRequest, Step};
-use pandafit_core::plan::{Plan, Target, TrackAction};
+use pandafit_core::plan::{Opts, Plan, Target, TrackAction};
 use pandafit_core::{
     estimate, explain, has_blockers, BitrateProfile, MediaInfo, Note, SizeBreakdown, Verdict,
 };
@@ -25,19 +25,21 @@ pub enum SessionEvent {
     Progress(ProgressEvent),
 }
 
+const LOG_CAPACITY: usize = 500;
+
 pub struct Session {
-    pub phase: Phase,
-    pub media: Option<MediaInfo>,
-    pub plan: Option<Plan>,
-    pub profile: Option<BitrateProfile>,
-    pub breakdown: Option<SizeBreakdown>,
-    pub notes: Vec<Note>,
-    pub steps: Vec<Step>,
-    pub log: Vec<String>,
-    pub current_step: Option<&'static str>,
-    pub position_s: f64,
-    pub bytes_written: u64,
-    pub error: Option<String>,
+    pub(crate) phase: Phase,
+    pub(crate) media: Option<MediaInfo>,
+    pub(crate) plan: Option<Plan>,
+    pub(crate) profile: Option<BitrateProfile>,
+    pub(crate) breakdown: Option<SizeBreakdown>,
+    pub(crate) notes: Vec<Note>,
+    pub(crate) steps: Vec<Step>,
+    pub(crate) log: Vec<String>,
+    pub(crate) current_step: Option<&'static str>,
+    pub(crate) position_s: f64,
+    pub(crate) bytes_written: u64,
+    pub(crate) error: Option<String>,
     registry: CodecRegistry,
 }
 
@@ -70,6 +72,16 @@ impl Session {
         &self.registry
     }
 
+    pub fn begin_running(&mut self) {
+        self.phase = Phase::Running;
+        self.error = None;
+    }
+
+    pub fn fail(&mut self, message: impl Into<String>) {
+        self.error = Some(message.into());
+        self.phase = Phase::Failed;
+    }
+
     pub fn apply(&mut self, event: SessionEvent) {
         match event {
             SessionEvent::FileOpened(media) => {
@@ -81,6 +93,12 @@ impl Session {
                 self.plan = Some(Plan::from_media(&media, target));
                 self.media = Some(media);
                 self.profile = None;
+                self.log.clear();
+                self.steps.clear();
+                self.current_step = None;
+                self.position_s = 0.0;
+                self.bytes_written = 0;
+                self.error = None;
                 self.phase = Phase::Setup;
             }
             SessionEvent::TargetChosen(target) => {
@@ -89,20 +107,7 @@ impl Session {
                 }
             }
             SessionEvent::TrackActionChanged { index, action } => {
-                let action = match (&action, self.media.as_ref().and_then(|m| m.track(index))) {
-                    (TrackAction::Transcode { codec_id, opts }, Some(track))
-                        if opts.bitrate_bps.is_none() =>
-                    {
-                        match self.registry.get(codec_id) {
-                            Some(p) => TrackAction::Transcode {
-                                codec_id: codec_id.clone(),
-                                opts: p.default_opts(track),
-                            },
-                            None => action,
-                        }
-                    }
-                    _ => action,
-                };
+                let action = self.fill_missing_transcode_defaults(index, action);
                 if let Some(p) = &mut self.plan {
                     p.set_action(index, action);
                 }
@@ -119,12 +124,35 @@ impl Session {
         self.recompute();
     }
 
+    fn fill_missing_transcode_defaults(&self, index: usize, action: TrackAction) -> TrackAction {
+        let (TrackAction::Transcode { codec_id, opts }, Some(track)) =
+            (&action, self.media.as_ref().and_then(|m| m.track(index)))
+        else {
+            return action;
+        };
+        if opts.bitrate_bps.is_some() {
+            return action;
+        }
+        let Some(profile) = self.registry.get(codec_id) else {
+            return action;
+        };
+        let defaults = profile.default_opts(track);
+        TrackAction::Transcode {
+            codec_id: codec_id.clone(),
+            opts: Opts {
+                bitrate_bps: opts.bitrate_bps.or(defaults.bitrate_bps),
+                channels: opts.channels.or(defaults.channels),
+                height: opts.height.or(defaults.height),
+            },
+        }
+    }
+
     fn on_progress(&mut self, ev: ProgressEvent) {
         match ev {
             ProgressEvent::Started { step_id, title } => {
                 self.current_step = Some(step_id);
-                self.log.push(format!("— {title}"));
-                self.phase = Phase::Running;
+                self.push_log_line(format!("— {title}"));
+                self.begin_running();
             }
             ProgressEvent::Tick { position_s, bytes_written, .. } => {
                 self.position_s = position_s;
@@ -133,10 +161,7 @@ impl Session {
                 }
             }
             ProgressEvent::Log { line, .. } => {
-                if self.log.len() == 500 {
-                    self.log.remove(0);
-                }
-                self.log.push(line);
+                self.push_log_line(line);
             }
             ProgressEvent::Finished { step_id } => {
                 if self.steps.last().map(|s| s.id) == Some(step_id) {
@@ -144,15 +169,20 @@ impl Session {
                 }
             }
             ProgressEvent::Failed { message, tail, .. } => {
-                self.error = Some(message);
+                self.fail(message);
                 self.log.extend(tail);
-                self.phase = Phase::Failed;
             }
             ProgressEvent::Cancelled => {
-                self.error = Some("отменено".into());
-                self.phase = Phase::Failed;
+                self.fail("отменено");
             }
         }
+    }
+
+    fn push_log_line(&mut self, line: String) {
+        if self.log.len() == LOG_CAPACITY {
+            self.log.remove(0);
+        }
+        self.log.push(line);
     }
 
     fn recompute(&mut self) {
@@ -259,6 +289,24 @@ mod tests {
     }
 
     #[test]
+    fn transcoding_keeps_a_user_chosen_height_and_only_fills_the_missing_bitrate() {
+        let mut s = opened();
+        s.apply(SessionEvent::TrackActionChanged {
+            index: 0,
+            action: TrackAction::Transcode {
+                codec_id: "hevc_nvenc".into(),
+                opts: Opts { bitrate_bps: None, channels: None, height: Some(1080) },
+            },
+        });
+        let action = s.plan.as_ref().unwrap().action(0).clone();
+        let TrackAction::Transcode { opts, .. } = action else {
+            panic!("ожидали Transcode");
+        };
+        assert_eq!(opts.height, Some(1080));
+        assert!(opts.bitrate_bps.is_some());
+    }
+
+    #[test]
     fn trim_narrows_the_plan_range() {
         let mut s = opened();
         s.apply(SessionEvent::TrimChanged { start_s: 0.0, end_s: 6700.0 });
@@ -271,7 +319,7 @@ mod tests {
         for i in [2usize, 3, 4, 5, 7] {
             s.apply(SessionEvent::TrackActionChanged { index: i, action: TrackAction::Drop });
         }
-        s.phase = Phase::Running;
+        s.begin_running();
         s.apply(SessionEvent::Progress(pandafit_media::ProgressEvent::Tick {
             step_id: "build",
             position_s: 3445.0,
@@ -280,5 +328,34 @@ mod tests {
         }));
         let projected = s.projected_total().unwrap();
         assert!(projected > 50_000_000_000, "прогноз {projected}");
+    }
+
+    #[test]
+    fn opening_a_new_file_clears_the_previous_build_traces() {
+        let mut s = opened();
+        s.fail("сборка не удалась");
+        s.log.push("хвост лога прошлой сборки".into());
+        s.steps.push(pandafit_core::compile::Step {
+            id: "build",
+            title: "старый шаг".into(),
+            program: "ffmpeg".into(),
+            args: Vec::new(),
+            progress: pandafit_core::compile::ProgressKind::FfmpegPipe,
+            produces: None,
+            prepare: None,
+        });
+        s.current_step = Some("build");
+        s.position_s = 1234.0;
+        s.bytes_written = 999;
+
+        s.apply(SessionEvent::FileOpened(thor()));
+
+        assert_eq!(s.phase, Phase::Setup);
+        assert!(s.log.is_empty());
+        assert!(s.steps.is_empty());
+        assert!(s.current_step.is_none());
+        assert_eq!(s.position_s, 0.0);
+        assert_eq!(s.bytes_written, 0);
+        assert!(s.error.is_none());
     }
 }

@@ -1,4 +1,4 @@
 [workspace]
 resolver = "2"
-members = ["crates/core"]
-# members = ["crates/media", "crates/app"]
+members = ["crates/core", "crates/media"]
+# members = ["crates/app"]

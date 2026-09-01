@@ -29,13 +29,15 @@ pub struct PreflightInput {
 }
 
 fn have(program: &str) -> bool {
-    Command::new(program)
+    match Command::new(program)
         .arg("--version")
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::null())
         .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    {
+        Ok(_) => true,
+        Err(e) => e.kind() != std::io::ErrorKind::NotFound,
+    }
 }
 
 fn tool_check(program: &str, hint: &str) -> CheckResult {
@@ -118,8 +120,10 @@ mod tests {
     #[test]
     fn ffmpeg_and_ffprobe_are_always_checked() {
         let r = preflight(&input());
-        assert!(r.checks.iter().any(|c| c.name.contains("ffmpeg")));
-        assert!(r.checks.iter().any(|c| c.name.contains("ffprobe")));
+        let ffmpeg = r.checks.iter().find(|c| c.name.contains("ffmpeg")).unwrap();
+        let ffprobe = r.checks.iter().find(|c| c.name.contains("ffprobe")).unwrap();
+        assert!(ffmpeg.ok, "{ffmpeg:?}");
+        assert!(ffprobe.ok, "{ffprobe:?}");
     }
 
     #[test]
@@ -133,11 +137,9 @@ mod tests {
 
     #[test]
     fn missing_tool_carries_an_install_hint() {
-        let r = preflight(&PreflightInput { needs_dv_tools: true, ..input() });
-        let c = r.checks.iter().find(|c| c.name.contains("dovi_tool")).unwrap();
-        if !c.ok {
-            assert!(c.detail.contains("cargo install") || c.detail.contains("apt"));
-        }
+        let c = tool_check("pandafit-definitely-missing-tool-xyz", "cargo install pandafit-definitely-missing-tool-xyz");
+        assert!(!c.ok);
+        assert_eq!(c.detail, "cargo install pandafit-definitely-missing-tool-xyz");
     }
 
     #[test]

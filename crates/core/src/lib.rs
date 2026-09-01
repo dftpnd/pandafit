@@ -21,4 +21,4 @@ pub use codec::{CodecProfile, CodecRegistry, EncodeCtx};
 pub use profile::{BitrateProfile, Sample};
 pub use estimate::{estimate, SizeBreakdown, TrackSize, Verdict};
 pub use explain::{explain, has_blockers};
-pub use compile::{compile, BuildRequest, ProgressKind, Step};
+pub use compile::{compile, needs_dv_chain, BuildRequest, PreparedFile, ProgressKind, Step};

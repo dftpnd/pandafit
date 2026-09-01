@@ -18,6 +18,7 @@ pub fn thor() -> MediaInfo {
         duration_s: 6890.176,
         color: ColorInfo::DolbyVision { profile: 8, has_hdr10_base: true },
         file_bytes: 61_909_045_268,
+        fps: 23.976,
         tracks: vec![
             Track {
                 index: 0,

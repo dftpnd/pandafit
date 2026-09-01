@@ -77,6 +77,8 @@ pub struct MediaInfo {
     pub color: ColorInfo,
     /// Фактический размер исходного файла на диске.
     pub file_bytes: u64,
+    /// Частота кадров видео. Нужна, чтобы покадрово синхронизировать RPU Dolby Vision с обрезкой.
+    pub fps: f64,
 }
 
 impl MediaInfo {

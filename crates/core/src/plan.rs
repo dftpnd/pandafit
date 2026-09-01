@@ -129,6 +129,7 @@ mod tests {
             }],
             color: ColorInfo::Hdr10,
             file_bytes: 625_000_000,
+            fps: 25.0,
         }
     }
 

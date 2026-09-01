@@ -4,8 +4,11 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+eframe = "0.36.1"
+egui = "0.36.1"
 pandafit-core = { path = "../core" }
 pandafit-media = { path = "../media" }
+rfd = "0.17.2"
 
 [[bin]]
 name = "pandafit"

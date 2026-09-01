@@ -218,7 +218,7 @@ mod tests {
     use pandafit_core::media::{ColorInfo, TrackKind};
     use pandafit_core::Confidence;
 
-    const FIXTURE: &str = include_str!("../tests/fixtures/thor.ffprobe.json");
+    const FIXTURE: &str = include_str!("../tests/fixtures/uhd_remux.handwritten.json");
 
     fn parsed() -> pandafit_core::MediaInfo {
         parse_ffprobe(FIXTURE, std::path::Path::new("/tmp/thor.mkv"), 61_909_045_268).unwrap()
@@ -271,5 +271,50 @@ mod tests {
         let m = parsed();
         assert_eq!(m.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count(), 7);
         assert_eq!(m.tracks.iter().filter(|t| t.kind == TrackKind::Subtitle).count(), 7);
+    }
+}
+
+#[cfg(test)]
+mod synthetic_fixture_tests {
+    use super::*;
+    use pandafit_core::media::{ColorInfo, TrackKind};
+
+    const SYNTHETIC_FIXTURE: &str = include_str!("../tests/fixtures/synthetic.ffprobe.json");
+
+    fn parsed_synthetic() -> pandafit_core::MediaInfo {
+        parse_ffprobe(SYNTHETIC_FIXTURE, std::path::Path::new("/tmp/synthetic.mkv"), 420_894).unwrap()
+    }
+
+    #[test]
+    fn parses_a_real_ffprobe_output_without_error() {
+        parsed_synthetic();
+    }
+
+    #[test]
+    fn finds_one_video_track_and_two_audio_tracks() {
+        let m = parsed_synthetic();
+        assert_eq!(m.tracks.iter().filter(|t| t.kind == TrackKind::Video).count(), 1);
+        assert_eq!(m.tracks.iter().filter(|t| t.kind == TrackKind::Audio).count(), 2);
+    }
+
+    #[test]
+    fn reads_language_and_title_of_the_first_audio_track() {
+        let m = parsed_synthetic();
+        let dub = m.tracks.iter().find(|t| t.kind == TrackKind::Audio).unwrap();
+        assert_eq!(dub.language.as_deref(), Some("rus"));
+        assert_eq!(dub.title.as_deref(), Some("Дубляж"));
+    }
+
+    #[test]
+    fn reads_duration_and_frame_rate_of_the_synthetic_clip() {
+        let m = parsed_synthetic();
+        assert!((m.duration_s - 5.0).abs() < 0.01);
+        assert!((m.fps - 24.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn color_defaults_to_sdr_without_dolby_vision_side_data() {
+        let m = parsed_synthetic();
+        assert_eq!(m.color, ColorInfo::Sdr);
     }
 }

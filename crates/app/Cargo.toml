@@ -1,0 +1,12 @@
+[package]
+name = "pandafit"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+pandafit-core = { path = "../core" }
+pandafit-media = { path = "../media" }
+
+[[bin]]
+name = "pandafit"
+path = "src/main.rs"
